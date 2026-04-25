@@ -88,6 +88,21 @@ function stripBackToHome(markdown) {
   return markdown.replace(/^\*\[Back to Home\]\(Home\)\*\n\n?/m, '');
 }
 
+function stripLeadingDivider(markdown) {
+  return markdown.replace(/^(# .+\n\n)---\n\n/, '$1');
+}
+
+function stripHomeTableOfContents(markdown, filename) {
+  if (filename !== 'Home.md') {
+    return markdown;
+  }
+
+  return markdown.replace(
+    /## Table of Contents[\s\S]*?---\n\n## A Note Before You Start/,
+    '## A Note Before You Start'
+  );
+}
+
 function rewriteInternalLinks(markdown, linkMap) {
   return markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (fullMatch, text, target) => {
     const trimmedTarget = target.trim();
@@ -105,10 +120,51 @@ function rewriteInternalLinks(markdown, linkMap) {
   });
 }
 
+function extractTitle(markdown, filename) {
+  const match = markdown.match(/^#\s+(.+)$/m);
+  if (match) {
+    return match[1].trim();
+  }
+
+  return path.basename(filename, path.extname(filename));
+}
+
+function buildSectionLabel(filename) {
+  if (filename === 'Home.md') {
+    return 'Guide Overview';
+  }
+
+  if (filename === 'Glossary.md') {
+    return 'Reference';
+  }
+
+  const chapterMatch = filename.match(/^Chapter-(\d+)-/);
+  if (chapterMatch) {
+    return `Chapter ${Number(chapterMatch[1])}`;
+  }
+
+  return 'Section';
+}
+
+function transformMarkdown(filename, markdown, linkMap) {
+  let result = normalizeMarkdown(markdown);
+  result = stripBackToHome(result);
+  result = stripLeadingDivider(result);
+  result = stripHomeTableOfContents(result, filename);
+  result = rewriteInternalLinks(result, linkMap);
+  return result;
+}
+
 function buildHtmlDocument({ sections, version, wikiCommit }) {
+  const tocItems = sections
+    .map((section) => {
+      return `<li class="toc-item"><a href="#${section.anchor}"><span class="toc-kicker">${section.label}</span><span class="toc-item-title">${section.title}</span></a></li>`;
+    })
+    .join('\n');
+
   const body = sections
     .map((section) => {
-      return `<section class="doc-section" id="${section.anchor}">\n${section.html}\n</section>`;
+      return `<section class="doc-section ${section.kind}" id="${section.anchor}">\n<div class="section-kicker">${section.label}</div>\n${section.html}\n</section>`;
     })
     .join('\n');
 
@@ -123,7 +179,7 @@ function buildHtmlDocument({ sections, version, wikiCommit }) {
     <style>
       @page {
         size: Letter;
-        margin: 0.7in;
+        margin: 0.8in 0.72in 0.9in 0.72in;
       }
 
       :root {
@@ -140,57 +196,183 @@ function buildHtmlDocument({ sections, version, wikiCommit }) {
 
       body {
         margin: 0;
-        color: #1e1a16;
-        background: #fffdf8;
+        color: #221c17;
+        background: #fbf8f2;
         font-family: Georgia, "Times New Roman", serif;
-        line-height: 1.55;
+        line-height: 1.65;
       }
 
       main {
         width: 100%;
       }
 
+      .cover-page,
+      .toc-section {
+        break-after: page;
+      }
+
+      .cover-page {
+        min-height: 9.05in;
+      }
+
+      .cover-frame {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 9.05in;
+        padding: 0.95in 0.85in;
+        border: 1px solid #dccfbd;
+        border-radius: 26px;
+        background:
+          radial-gradient(circle at top left, rgba(217, 185, 143, 0.28), transparent 36%),
+          linear-gradient(145deg, #fffdf8 0%, #f7efe2 52%, #fdf9f2 100%);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+      }
+
+      .cover-eyebrow {
+        color: #8f5a28;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .cover-title {
+        margin: 0;
+        max-width: 8.2in;
+        color: #1c1713;
+        font-size: 2.7rem;
+        line-height: 1.06;
+        padding-bottom: 0;
+        border-bottom: 0;
+      }
+
+      .cover-subtitle {
+        margin: 1rem 0 0;
+        max-width: 6.8in;
+        color: #51453a;
+        font-size: 1.05rem;
+      }
+
+      .cover-meta {
+        display: flex;
+        gap: 0.9rem;
+        flex-wrap: wrap;
+        margin-top: 1.75rem;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 0.85rem;
+        color: #6c5b4d;
+      }
+
+      .cover-chip {
+        padding: 0.35rem 0.65rem;
+        border: 1px solid #dfcfba;
+        border-radius: 999px;
+        background: rgba(255, 251, 244, 0.78);
+      }
+
+      .toc-section {
+        padding: 0.15in 0 0;
+      }
+
+      .toc-title {
+        margin: 0 0 0.2rem;
+        color: #1f1914;
+        font-size: 2.1rem;
+        padding-bottom: 0;
+        border-bottom: 0;
+      }
+
+      .toc-copy {
+        margin: 0 0 1.2rem;
+        color: #5a4c3f;
+        max-width: 5.8in;
+      }
+
+      .toc-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        border-top: 1px solid #deceb9;
+      }
+
+      .toc-item {
+        border-bottom: 1px solid #eadfce;
+      }
+
+      .toc-item a {
+        display: flex;
+        gap: 0.9rem;
+        align-items: baseline;
+        padding: 0.72rem 0;
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .toc-kicker {
+        width: 1.35in;
+        flex: 0 0 1.35in;
+        color: #8f5a28;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .toc-item-title {
+        flex: 1 1 auto;
+        color: #231d17;
+        font-size: 1rem;
+      }
+
       .doc-section {
         break-before: page;
+        padding-top: 0.08in;
       }
 
-      .doc-section:first-of-type {
-        break-before: auto;
-      }
-
-      .build-meta {
-        margin-top: 0.5rem;
-        margin-bottom: 1.75rem;
-        color: #6b6258;
-        font-size: 0.9rem;
+      .section-kicker {
+        margin-bottom: 0.55rem;
+        color: #8f5a28;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
       }
 
       h1, h2, h3 {
-        color: #241d16;
-        line-height: 1.2;
-        margin-top: 1.4em;
-        margin-bottom: 0.55em;
+        color: #241c15;
+        line-height: 1.22;
+        margin-top: 1.5em;
+        margin-bottom: 0.58em;
         break-after: avoid-page;
       }
 
       h1 {
-        font-size: 1.9rem;
         margin-top: 0;
+        margin-bottom: 0.9rem;
+        padding-bottom: 0.45rem;
+        font-size: 1.9rem;
+        border-bottom: 2px solid #dfcfba;
       }
 
       h2 {
-        font-size: 1.35rem;
-        padding-top: 0.2rem;
-        border-top: 1px solid #d8cbbd;
+        font-size: 1.3rem;
+        padding-bottom: 0.2rem;
+        border-bottom: 1px solid #e7dbc9;
       }
 
       h3 {
-        font-size: 1.05rem;
+        font-size: 1.02rem;
       }
 
       p, ul, ol, table, pre, blockquote {
         margin-top: 0;
-        margin-bottom: 1rem;
+        margin-bottom: 0.95rem;
+        orphans: 3;
+        widows: 3;
       }
 
       ul, ol {
@@ -198,18 +380,25 @@ function buildHtmlDocument({ sections, version, wikiCommit }) {
       }
 
       li + li {
-        margin-top: 0.3rem;
+        margin-top: 0.28rem;
       }
 
       a {
         color: #7a3e17;
-        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.12em;
+      }
+
+      ul li::marker,
+      ol li::marker {
+        color: #9b6431;
       }
 
       hr {
         border: 0;
-        border-top: 1px solid #d8cbbd;
-        margin: 1.4rem 0;
+        height: 1px;
+        margin: 1.45rem 0;
+        background: linear-gradient(90deg, transparent 0%, #d7c5ae 18%, #d7c5ae 82%, transparent 100%);
       }
 
       strong {
@@ -224,17 +413,18 @@ function buildHtmlDocument({ sections, version, wikiCommit }) {
         font-family: "Cascadia Code", Consolas, "Courier New", monospace;
         font-size: 0.92em;
         padding: 0.08rem 0.25rem;
-        background: #f6efe5;
+        background: #f5ede2;
         border-radius: 4px;
       }
 
       pre {
+        break-inside: avoid;
         overflow-wrap: anywhere;
         white-space: pre-wrap;
-        padding: 0.9rem 1rem;
-        background: #f6efe5;
-        border: 1px solid #eadfce;
-        border-radius: 8px;
+        padding: 0.95rem 1rem;
+        background: linear-gradient(180deg, #f8f2e9 0%, #f5ece0 100%);
+        border: 1px solid #e7dbc9;
+        border-radius: 12px;
       }
 
       pre code {
@@ -243,14 +433,17 @@ function buildHtmlDocument({ sections, version, wikiCommit }) {
       }
 
       blockquote {
+        break-inside: avoid;
         margin-left: 0;
-        padding: 0.2rem 1rem;
-        border-left: 4px solid #d2a679;
+        padding: 0.35rem 1rem;
+        border-left: 4px solid #cd9d6b;
         color: #53483d;
         background: #fbf6ef;
+        border-radius: 0 10px 10px 0;
       }
 
       table {
+        break-inside: avoid;
         width: 100%;
         border-collapse: collapse;
         font-size: 0.96rem;
@@ -275,11 +468,39 @@ function buildHtmlDocument({ sections, version, wikiCommit }) {
       img {
         max-width: 100%;
       }
+
+      .doc-section p:last-child,
+      .doc-section ul:last-child,
+      .doc-section ol:last-child {
+        margin-bottom: 0;
+      }
     </style>
   </head>
   <body>
     <main>
-      <div class="build-meta">Master PDF version ${version} · source wiki commit ${commitLabel}</div>
+      <section class="cover-page">
+        <div class="cover-frame">
+          <div>
+            <div class="cover-eyebrow">Master PDF Edition</div>
+            <h1 class="cover-title">${GUIDE_NAME}</h1>
+            <p class="cover-subtitle">A beginner-to-advanced guide to what Lemonade.gg is, how it works, how to prompt it well, and how to use it effectively inside Roblox Studio.</p>
+          </div>
+          <div>
+            <div class="cover-meta">
+              <span class="cover-chip">Version ${version}</span>
+              <span class="cover-chip">Source wiki ${commitLabel}</span>
+              <span class="cover-chip">Single-file master export</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="toc-section">
+        <h1 class="toc-title">Contents</h1>
+        <p class="toc-copy">This PDF is generated from the live GitHub wiki and arranged as one continuous handbook for reading, sharing, and archiving.</p>
+        <ol class="toc-list">
+          ${tocItems}
+        </ol>
+      </section>
       ${body}
     </main>
   </body>
@@ -320,7 +541,7 @@ async function getGitHead(directory) {
   }
 }
 
-async function renderPdf(htmlPath, pdfPath) {
+async function renderPdf(htmlPath, pdfPath, version) {
   const launchOptions = { headless: true };
 
   if (process.env.PDF_BROWSER_EXECUTABLE) {
@@ -342,7 +563,17 @@ async function renderPdf(htmlPath, pdfPath) {
     await page.pdf({
       path: pdfPath,
       format: 'Letter',
-      printBackground: true
+      printBackground: true,
+      displayHeaderFooter: true,
+      preferCSSPageSize: true,
+      margin: {
+        top: '0.8in',
+        right: '0.72in',
+        bottom: '0.9in',
+        left: '0.72in'
+      },
+      headerTemplate: '<div></div>',
+      footerTemplate: `<div style="width:100%;padding:0 24px;font-size:8px;color:#7b6c59;display:flex;justify-content:space-between;align-items:center;"><span>${GUIDE_NAME} v${version}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`
     });
   } finally {
     await browser.close();
@@ -393,9 +624,12 @@ async function main() {
     const filePath = path.join(wikiDir, filename);
     const rawMarkdown = await fs.readFile(filePath, 'utf8');
     const anchor = slugify(path.basename(filename, path.extname(filename)));
-    const normalized = rewriteInternalLinks(stripBackToHome(normalizeMarkdown(rawMarkdown)), linkMap);
+    const normalized = transformMarkdown(filename, rawMarkdown, linkMap);
+    const title = extractTitle(normalized, filename);
     const html = marked.parse(normalized);
-    sections.push({ anchor, html });
+    const kind = filename === 'Home.md' ? 'overview' : filename === 'Glossary.md' ? 'glossary' : 'chapter';
+    const label = buildSectionLabel(filename);
+    sections.push({ anchor, html, kind, label, title });
   }
 
   const html = buildHtmlDocument({
@@ -410,7 +644,7 @@ async function main() {
   const historyPdfPath = path.join(historyDir, `${GUIDE_BASENAME}-v${nextVersion}.pdf`);
 
   await fs.writeFile(tempHtmlPath, html, 'utf8');
-  await renderPdf(tempHtmlPath, latestPdfPath);
+  await renderPdf(tempHtmlPath, latestPdfPath, nextVersion);
   await fs.copyFile(latestPdfPath, historyPdfPath);
 
   const nextEntry = {
