@@ -70,7 +70,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main
           git add VERSION pdf
           git commit -m "Build master PDF v${version} from wiki ${wiki_sha}"
+          git pull --rebase origin main
           git push
