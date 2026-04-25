@@ -1,0 +1,12 @@
+{
+  "name": "lemonade-pdf-starterguide",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:pdf": "node scripts/build-master-pdf.mjs"
+  },
+  "devDependencies": {
+    "marked": "^18.0.2",
+    "playwright": "^1.59.1"
+  }
+}

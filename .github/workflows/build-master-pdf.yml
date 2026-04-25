@@ -1,0 +1,84 @@
+name: Build Master PDF
+
+on:
+  gollum:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: Force a new PDF version even if the wiki commit has not changed
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-master-pdf.yml
+      - scripts/build-master-pdf.mjs
+      - package.json
+      - package-lock.json
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-master-pdf
+  cancel-in-progress: false
+
+jobs:
+  build-pdf:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out main repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Clone live wiki repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki-source
+
+      - name: Build versioned PDF from wiki
+        shell: bash
+        run: |
+          force_flag=""
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.force_rebuild }}" == "true" ]]; then
+            force_flag="--force"
+          fi
+
+          node scripts/build-master-pdf.mjs --wiki-dir wiki-source --output-dir pdf --version-file VERSION --manifest-file pdf/manifest.json ${force_flag}
+
+      - name: Commit updated PDF artifacts
+        run: |
+          if [[ -z "$(git status --porcelain -- VERSION pdf)" ]]; then
+            echo "No PDF artifacts changed."
+            exit 0
+          fi
+
+          version="$(tr -d '\r\n' < VERSION)"
+          wiki_sha="$(git -C wiki-source rev-parse --short HEAD)"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          git add VERSION pdf
+          git commit -m "Build master PDF v${version} from wiki ${wiki_sha}"
+          git push

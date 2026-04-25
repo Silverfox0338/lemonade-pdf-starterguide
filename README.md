@@ -20,6 +20,11 @@ The full guide is published as a GitHub Wiki:
 
 **[View the Lemonade.gg Starter Guide Wiki](../../wiki)**
 
+The repo also stores an auto-generated master PDF:
+
+- `pdf/Lemonade.gg-Starter-Guide-latest.pdf`
+- Versioned PDF history in `pdf/history/`
+
 ---
 
 ## What Is Covered
@@ -38,7 +43,6 @@ The full guide is published as a GitHub Wiki:
 | Chapter 10 | Limitations and What to Expect |
 | Chapter 11 | Frequently Asked Questions |
 | Glossary | Glossary of Terms |
-| Common Errors and Fixes | Errors, bugs, and how to fix them |
 
 ---
 
@@ -57,3 +61,5 @@ Find Lemonade at [lemonade.gg](https://lemonade.gg).
 ## Notes
 
 The `.wiki/` folder in this repo contains the local copy of the wiki for editing. It is excluded from the main repo via `.gitignore` since it is a separate git repository that syncs to the GitHub Wiki.
+
+The main repo includes a GitHub Actions workflow that listens for wiki updates and rebuilds a single master PDF automatically. Each new wiki revision produces the next patch version in the PDF history, starting from `1.0.1`.
